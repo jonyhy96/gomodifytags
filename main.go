@@ -65,6 +65,7 @@ type config struct {
 	skipUnexportedFields bool
 
 	transform   string
+	template    string
 	sort        bool
 	clear       bool
 	clearOption bool
@@ -109,8 +110,9 @@ func realMain() error {
 		flagSkipPrivateFields = flag.Bool("skip-unexported", false, "Skip unexported fields")
 		flagTransform         = flag.String("transform", "snakecase",
 			"Transform adds a transform rule when adding tags."+
-				" Current options: [snakecase, camelcase, lispcase, pascalcase, keep]")
-		flagSort = flag.Bool("sort", false,
+				" Current options: [snakecase, camelcase, lispcase, pascalcase, keep, custom]")
+		flagTemplate = flag.String("template", "", "Template to be used for 'custom' transform.")
+		flagSort     = flag.Bool("sort", false,
 			"Sort sorts the tags in increasing order according to the key name")
 
 		// option flags
@@ -145,6 +147,7 @@ func realMain() error {
 		clear:                *flagClearTags,
 		clearOption:          *flagClearOptions,
 		transform:            *flagTransform,
+		template:             *flagTemplate,
 		sort:                 *flagSort,
 		override:             *flagOverride,
 		skipUnexportedFields: *flagSkipPrivateFields,
@@ -397,6 +400,10 @@ func (c *config) addTags(fieldName string, tags *structtag.Tags) (*structtag.Tag
 		name = fieldName
 	default:
 		unknown = true
+	}
+
+	if c.template != "" {
+		name = strings.ReplaceAll(c.template, "$value", name)
 	}
 
 	for _, key := range c.add {
