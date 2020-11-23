@@ -15,6 +15,7 @@ import (
 	"io"
 	"io/ioutil"
 	"os"
+	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
@@ -42,6 +43,7 @@ type output struct {
 
 // config defines how tags should be modified
 type config struct {
+	dir      string
 	file     string
 	output   string
 	write    bool
@@ -92,6 +94,36 @@ func realMain() error {
 		return err
 	}
 
+	if cfg.dir != "" {
+		if cfg.dir == "." {
+			cfg.dir, _ = os.Getwd()
+		}
+		err := filepath.Walk(cfg.dir, func(fpath string, fileInfo os.FileInfo, err error) error {
+			if err != nil {
+				return nil
+			}
+			if fileInfo.IsDir() {
+				return nil
+			}
+
+			d, _ := filepath.Rel(cfg.dir, fpath)
+			if !(d == "vendor" || strings.HasPrefix(d, "vendor"+string(os.PathSeparator))) &&
+				!strings.Contains(d, "tests") && strings.Contains(fileInfo.Name(), ".go") {
+				cfg.file = fpath // Warning reset cfg.file to not break current behavior,This will issue when concurrent use cfg.
+				return handleSingleFile(cfg)
+			}
+			return nil
+		})
+		if err != nil {
+			panic(err)
+		}
+		return nil
+	}
+
+	return handleSingleFile(cfg)
+}
+
+func handleSingleFile(cfg *config) error {
 	node, err := cfg.parse()
 	if err != nil {
 		return err
@@ -121,6 +153,7 @@ func realMain() error {
 func parseConfig(args []string) (*config, error) {
 	var (
 		// file flags
+		flagDir   = flag.String("dir", "", "Dictionary name (`.` means all files under this directory)")
 		flagFile  = flag.String("file", "", "Filename to be parsed")
 		flagWrite = flag.Bool("w", false,
 			"Write result to (source) file instead of stdout")
@@ -180,6 +213,7 @@ func parseConfig(args []string) (*config, error) {
 	}
 
 	cfg := &config{
+		dir:                  *flagDir,
 		file:                 *flagFile,
 		line:                 *flagLine,
 		structName:           *flagStruct,
@@ -778,8 +812,8 @@ func (c *config) rewrite(node ast.Node, start, end int) (ast.Node, error) {
 
 // validate validates whether the config is valid or not
 func (c *config) validate() error {
-	if c.file == "" {
-		return errors.New("no file is passed")
+	if c.file == "" && c.dir == "" {
+		return errors.New("no file or directory is passed")
 	}
 
 	if c.line == "" && c.offset == 0 && c.structName == "" && !c.all {
